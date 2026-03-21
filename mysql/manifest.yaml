@@ -48,6 +48,25 @@ spec:
         #     port: 3306
         #   initialDelaySeconds: 20
         #   periodSeconds: 5
+        startupProbe:
+          tcpSocket:
+            port: 3306
+          initialDelaySeconds: 15
+          failureThreshold: 30  # Try 30 times...
+          periodSeconds: 10     # ...every 10 seconds. (Total 300s / 5 mins)
+        
+        readinessProbe:
+          tcpSocket:
+            port: 3306
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        livenessProbe:
+          tcpSocket:
+            port: 3306
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        
         volumeMounts:
         - name: mysql-config
           mountPath: /etc/mysql/conf.d/my.cnf
