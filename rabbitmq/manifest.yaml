@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: rabbitmq
-  namespace: roboshop
+  namespace: bsathi2020-dev
   # these are replica set labels
   labels:
     project: roboshop
@@ -48,7 +48,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: rabbitmq
-  namespace: roboshop
+  namespace: bsathi2020-dev
 spec:
   selector:
     project: roboshop

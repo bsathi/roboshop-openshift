@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: debug
-  namespace: roboshop
+  namespace: bsathi2020-dev
   labels:
     name: debug
     project: roboshop

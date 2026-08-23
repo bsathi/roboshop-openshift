@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mongodb-accept-catalogue
-  namespace: roboshop
+  namespace: bsathi2020-dev
 spec:
   podSelector:
     matchLabels:
