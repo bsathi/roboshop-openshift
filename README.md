@@ -44,6 +44,18 @@ Watch each component with `oc get pods -w` / `oc logs deployment/<name>` before 
 
 ---
 
+## Branches
+
+| Branch | Description |
+|---|---|
+| `main` (default) | Ephemeral datastores — mysql/mongodb data resets on every pod restart. Simplest starting point. |
+| [`persistent-storage`](../../tree/persistent-storage) | Adds PersistentVolumeClaims for mysql/mongodb, with fixes for three real OpenShift PVC gotchas (documented in that branch's RCA notes): a `lost+found`-triggered false "data directory not empty" error, an undersized PVC silently failing MySQL initialization, and a `RollingUpdate`/`ReadWriteOnce` deadlock — fixed via a `Recreate` deployment strategy. |
+
+To try the persistent-storage variant:
+\`\`\`bash
+git clone --branch persistent-storage https://github.com/bsathi/roboshop-openshift.git
+\`\`\`
+
 ## Learning path (`docs/`)
 
 This repo doubles as a self-contained OpenShift upskilling curriculum. Work through it in order:
