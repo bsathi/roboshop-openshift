@@ -3,20 +3,19 @@ kind: Deployment
 metadata:
   name: mongodb
   namespace: bsathi2020-dev
-  # these are replica set labels
   labels:
     project: roboshop
     component: mongodb
     tier: db
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
-    # these labels are used to select pods
     matchLabels:
       project: roboshop
       component: mongodb
       tier: db
-  # pod definition
   template:
     metadata:
       labels:
@@ -24,6 +23,13 @@ spec:
         component: mongodb
         tier: db
     spec:
+      initContainers:
+      - name: fix-mongodb-datadir
+        image: busybox
+        command: ["sh", "-c", "rm -rf /data/db/lost+found"]
+        volumeMounts:
+        - name: mongodb-data
+          mountPath: /data/db
       containers:
       - name: mongodb
         image: bsathi2020/mongodb:openshift
@@ -38,6 +44,13 @@ spec:
             port: 27017
           initialDelaySeconds: 5
           periodSeconds: 5
+        volumeMounts:
+        - name: mongodb-data
+          mountPath: /data/db
+      volumes:
+        - name: mongodb-data
+          persistentVolumeClaim:
+            claimName: mongodb-data
 ---
 apiVersion: v1
 kind: Service
@@ -51,5 +64,5 @@ spec:
     tier: db
   ports:
     - protocol: TCP
-      port: 27017 # service port
-      targetPort: 27017 # container port
+      port: 27017
+      targetPort: 27017

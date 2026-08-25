@@ -19,6 +19,8 @@ metadata:
     tier: db
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       project: roboshop
