@@ -36,7 +36,7 @@ spec:
       initContainers:
       - name: fix-mysql-datadir
         image: busybox
-        command: ["sh", "-c", "rm -rf /var/lib/mysql/lost+found; rm -rf /var/lib/mysql/*"]
+        command: ["sh", "-c", "COUNT=$(ls -A /var/lib/mysql | grep -v lost+found | wc -l); if [ \"$COUNT\" -eq 0 ]; then rm -rf /var/lib/mysql/lost+found; fi"]
         volumeMounts:
         - name: mysql-data
           mountPath: /var/lib/mysql
