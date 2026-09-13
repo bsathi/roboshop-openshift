@@ -66,6 +66,7 @@ This repo doubles as a self-contained OpenShift upskilling curriculum. Work thro
 | `docs/phase1-setup-README.md` | Client tooling setup on Ubuntu/WSL2 + VS Code, Sandbox login |
 | `docs/phase2-orientation-README.md` | Hands-on cluster orientation — quota, SCC behavior, a disposable test deploy |
 | `docs/phase3-manifest-conversion-README.md` | **The full migration + root-cause-analysis journal** — every real error hit deploying this app (SCC/permission failures, `subPath` ConfigMap gotchas, and more), the diagnosis process, and the exact fix, in the order it actually happened |
+| `docs/performance-testing/` | JMeter load test plan (10 concurrent users), NFR thresholds, HTML dashboard generation, and a Jenkins pipeline with automated pass/fail quality gates |
 | `docs/OpenShift-Upskilling-Session-Transcript.docx` | Full prompt-by-prompt record of the debugging session this repo came out of |
 
 If you're new to OpenShift, **Phase 3's RCA journal is the most valuable read in this repo** — it's written to teach the debugging pattern (recognizing OpenShift's restricted SCC / arbitrary-UID behavior on sight), not just document the fix.

@@ -1,0 +1,109 @@
+// Jenkinsfile — roboshop performance test pipeline
+//
+// Stages: checkout -> run JMeter (CLI, headless) -> generate HTML dashboard ->
+//         evaluate quality gate -> archive artifacts -> (optionally) promote/block deployment
+//
+// Requires on the Jenkins agent: Java (for JMeter), Python 3, and either a local
+// JMeter install or the JMETER_HOME below pointed at one. Adjust JMETER_HOME,
+// TARGET_HOST, and the quality-gate script path to match your environment.
+
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'TARGET_HOST', defaultValue: 'frontend-bsathi2020-dev.apps.rm3.7wse.p1.openshiftapps.com',
+               description: 'roboshop frontend Route hostname to load test')
+        string(name: 'THREADS', defaultValue: '10', description: 'Concurrent virtual users')
+        string(name: 'RAMPUP', defaultValue: '10', description: 'Ramp-up period in seconds')
+        string(name: 'LOOPS', defaultValue: '5', description: 'Iterations per virtual user')
+    }
+
+    environment {
+        JMETER_HOME   = '/opt/apache-jmeter-5.6.3'
+        PATH          = "${JMETER_HOME}/bin:${env.PATH}"
+        RESULTS_FILE  = 'results.jtl'
+        REPORT_DIR    = 'report-html'
+        JMX_FILE      = 'roboshop-performance-test.jmx'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+                sh 'ls -la'
+            }
+        }
+
+        stage('Verify Environment') {
+            steps {
+                sh '''
+                    echo "Java version:"
+                    java -version
+                    echo "JMeter version:"
+                    jmeter --version || { echo "JMeter not found on PATH/JMETER_HOME"; exit 1; }
+                    echo "Python version:"
+                    python3 --version
+                '''
+            }
+        }
+
+        stage('Run JMeter Load Test') {
+            steps {
+                sh """
+                    rm -rf ${REPORT_DIR} ${RESULTS_FILE}
+                    jmeter -n -t ${JMX_FILE} \
+                        -JHOST=${params.TARGET_HOST} \
+                        -JTHREADS=${params.THREADS} \
+                        -JRAMPUP=${params.RAMPUP} \
+                        -JLOOPS=${params.LOOPS} \
+                        -l ${RESULTS_FILE} \
+                        -e -o ${REPORT_DIR}
+                """
+            }
+        }
+
+        stage('Evaluate Quality Gate') {
+            steps {
+                script {
+                    def exitCode = sh(script: "python3 quality_gate.py ${RESULTS_FILE}", returnStatus: true)
+                    // Always show the human-readable report in the build log, pass or fail:
+                    sh "python3 quality_gate.py ${RESULTS_FILE} || true"
+                    if (exitCode != 0) {
+                        currentBuild.result = 'FAILURE'
+                        error("Performance quality gate FAILED — NFR thresholds breached. Blocking this build/deployment.")
+                    } else {
+                        echo "Performance quality gate PASSED — all NFR thresholds met."
+                    }
+                }
+            }
+        }
+
+        stage('Archive Results') {
+            steps {
+                archiveArtifacts artifacts: "${RESULTS_FILE}", allowEmptyArchive: false
+                archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: false
+                publishHTML(target: [
+                    reportName : 'JMeter Performance Dashboard',
+                    reportDir  : "${REPORT_DIR}",
+                    reportFiles: 'index.html',
+                    keepAll    : true,
+                    alwaysLinkToLastBuild: true,
+                    allowMissing: false
+                ])
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Performance test passed the quality gate. Safe to proceed with deployment/promotion.'
+        }
+        failure {
+            echo 'Performance test failed the quality gate. Deployment/promotion should be blocked — review the dashboard and quality gate report above.'
+        }
+        always {
+            echo "Build result: ${currentBuild.result}"
+        }
+    }
+}
