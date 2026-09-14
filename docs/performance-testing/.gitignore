@@ -1,0 +1,4 @@
+smoke-report-html*/
+*.jtl
+jmeter.log
+run-console.log

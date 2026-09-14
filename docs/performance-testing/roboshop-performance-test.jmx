@@ -69,7 +69,7 @@
       <hashTree>
 
         <!-- Per-user unique test identity -->
-        <UserParameters guiclass="UserParametersGui" testclass="UserParameters" testname="Per-User Test Data" enabled="true">
+<!--         <UserParameters guiclass="UserParametersGui" testclass="UserParameters" testname="Per-User Test Data" enabled="true">
           <collectionProp name="UserParameters.names">
             <stringProp name="1">TESTUSER</stringProp>
           </collectionProp>
@@ -80,6 +80,15 @@
           </collectionProp>
           <boolProp name="UserParameters.per_iteration">false</boolProp>
         </UserParameters>
+        <hashTree/> -->
+
+        <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Generate TESTUSER" enabled="true">
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="script">vars.put("TESTUSER", "perftest_" + ctx.getThreadNum() + "_" + vars.getIteration() + "_" + (System.currentTimeMillis() % 100000));</stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223PreProcessor>
         <hashTree/>
 
         <!-- Constant timer for realistic pacing between transactions -->
@@ -183,7 +192,9 @@
               <collectionProp name="Arguments.arguments">
                 <elementProp name="" elementType="HTTPArgument">
                   <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                  <stringProp name="Argument.value">{"name":"Perf Test","username":"${TESTUSER}","password":"Passw0rd!","email":"${TESTUSER}@example.com"}</stringProp>
+                  <!-- <stringProp name="Argument.value">{"name":"Perf Test","username":"${TESTUSER}","password":"Passw0rd!","email":"${TESTUSER}@example.com"}</stringProp> -->
+                  <stringProp name="Argument.value">{"name":"${TESTUSER}","password":"Passw0rd!","email":"${TESTUSER}@example.com"}</stringProp>
+                  
                   <stringProp name="Argument.metadata">=</stringProp>
                 </elementProp>
               </collectionProp>
@@ -220,7 +231,8 @@
               <collectionProp name="Arguments.arguments">
                 <elementProp name="" elementType="HTTPArgument">
                   <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                  <stringProp name="Argument.value">{"username":"${TESTUSER}","password":"Passw0rd!"}</stringProp>
+                  <!-- <stringProp name="Argument.value">{"username":"${TESTUSER}","password":"Passw0rd!"}</stringProp> -->
+                  <stringProp name="Argument.value">{"name":"${TESTUSER}","password":"Passw0rd!"}</stringProp>
                   <stringProp name="Argument.metadata">=</stringProp>
                 </elementProp>
               </collectionProp>
