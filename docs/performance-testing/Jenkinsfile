@@ -1,11 +1,44 @@
-// Jenkinsfile — roboshop performance test pipeline
+// Jenkinsfile - roboshop performance test pipeline (Windows Jenkins agent + WSL2 JMeter)
 //
-// Stages: checkout -> run JMeter (CLI, headless) -> generate HTML dashboard ->
-//         evaluate quality gate -> archive artifacts -> (optionally) promote/block deployment
+// This pipeline runs on a Windows Jenkins agent (matches the existing Jenkins install on
+// Windows 10) but executes the actual JMeter test inside WSL2 Ubuntu-26.04, reusing the
+// exact JMeter/Java/Beanshell environment already validated throughout this project -
+// rather than installing and re-validating a second, separate JMeter setup natively on
+// Windows.
 //
-// Requires on the Jenkins agent: Java (for JMeter), Python 3, and either a local
-// JMeter install or the JMETER_HOME below pointed at one. Adjust JMETER_HOME,
-// TARGET_HOST, and the quality-gate script path to match your environment.
+// Requires on the Jenkins Windows agent:
+//   - WSL2 with the Ubuntu-26.04 distro already installed and working (confirmed present)
+//   - JMeter 5.6.3 already installed inside that WSL2 distro (confirmed present)
+//   - python3 available inside WSL2 (confirmed present, used for quality_gate.py)
+//   - The "HTML Publisher" Jenkins plugin installed (Manage Jenkins -> Plugins)
+//
+// IMPORTANT #1: if Jenkins runs as a Windows Service under a service account (e.g. "Local
+// System") rather than your own interactive Windows user, that account may not have
+// access to your user's WSL2 distro by default - WSL2 distros are registered per-Windows-
+// user. If you're running Jenkins interactively (java -jar jenkins.war under your own
+// login, as in this project), this does not apply - Jenkins already shares your own WSL2
+// access.
+//
+// IMPORTANT #2: every "wsl" call below explicitly targets "-d Ubuntu-26.04" rather than
+// relying on WSL's default distro. This project's WSL2 install has two registered distros
+// (Ubuntu-26.04, plus a minimal "docker-desktop" utility distro Docker Desktop registers
+// for its own internal use) - docker-desktop was found to be the default, meaning a bare
+// "wsl <command>" silently routed to a distro with no bash/java/jmeter/python3 installed.
+// Always name the distro explicitly in automation for this reason.
+//
+// IMPORTANT #3: jmeter is invoked by its FULL ABSOLUTE PATH (/opt/apache-jmeter-5.6.3/bin/
+// jmeter) rather than relying on PATH. Two earlier approaches were tried and abandoned:
+// (a) "bash -lc" (login shell) did not reliably source .bashrc's PATH addition when
+// invoked non-interactively via wsl.exe from Windows - a known WSL shell-profile quirk;
+// (b) explicitly exporting PATH inline (export PATH=...:$PATH) broke instead, because
+// this WSL2 install inherits a very large Windows-side PATH via WSL interop containing
+// entries with spaces and parentheses (e.g. "Program Files (x86)", "Intel(R) Management
+// Engine Components") - left unquoted, bash's word-splitting on that expansion produced a
+// genuine syntax error. Calling jmeter by its full path sidesteps both problems entirely;
+// java and python3 need no special handling at all, since they're standard apt-installed
+// binaries already on the baseline system PATH regardless of shell/profile context -
+// confirmed directly: "wsl -d Ubuntu-26.04 bash -c "java -version && python3 --version &&
+// /opt/apache-jmeter-5.6.3/bin/jmeter --version"" succeeded with no PATH changes needed.
 
 pipeline {
     agent any
@@ -19,11 +52,11 @@ pipeline {
     }
 
     environment {
-        JMETER_HOME   = '/opt/apache-jmeter-5.6.3'
-        PATH          = "${JMETER_HOME}/bin:${env.PATH}"
-        RESULTS_FILE  = 'results.jtl'
-        REPORT_DIR    = 'report-html'
-        JMX_FILE      = 'roboshop-performance-test.jmx'
+        JMX_FILE       = 'roboshop-performance-test.jmx'
+        RESULTS_FILE   = 'results.jtl'
+        REPORT_DIR     = 'performance-report'
+        ORDER_RESULTS  = 'order-results.txt'
+        JMETER_BIN     = '/opt/apache-jmeter-5.6.3/bin/jmeter'
     }
 
     stages {
@@ -31,49 +64,53 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                sh 'ls -la'
+                bat 'dir'
             }
         }
 
-        stage('Verify Environment') {
+        stage('Resolve WSL Workspace Path') {
             steps {
-                sh '''
-                    echo "Java version:"
-                    java -version
-                    echo "JMeter version:"
-                    jmeter --version || { echo "JMeter not found on PATH/JMETER_HOME"; exit 1; }
-                    echo "Python version:"
-                    python3 --version
-                '''
+                script {
+                    // Translate the Windows workspace path Jenkins gave us into the
+                    // equivalent path as seen from inside WSL2, using WSL's own
+                    // wslpath utility rather than a hand-written regex - more robust
+                    // across different Windows usernames/drive letters.
+                    env.WSL_WORKSPACE = bat(
+                        script: "@wsl -d Ubuntu-26.04 wslpath -a \"${env.WORKSPACE}\"",
+                        returnStdout: true
+                    ).trim()
+                    echo "Windows workspace: ${env.WORKSPACE}"
+                    echo "WSL2-visible path: ${env.WSL_WORKSPACE}"
+                }
             }
         }
 
-        stage('Run JMeter Load Test') {
+        stage('Verify WSL/JMeter Environment') {
             steps {
-                sh """
-                    rm -rf ${REPORT_DIR} ${RESULTS_FILE}
-                    jmeter -n -t ${JMX_FILE} \
-                        -JHOST=${params.TARGET_HOST} \
-                        -JTHREADS=${params.THREADS} \
-                        -JRAMPUP=${params.RAMPUP} \
-                        -JLOOPS=${params.LOOPS} \
-                        -l ${RESULTS_FILE} \
-                        -e -o ${REPORT_DIR}
-                """
+                bat "wsl -d Ubuntu-26.04 bash -c \"java -version && python3 --version && ${JMETER_BIN} --version\""
+            }
+        }
+
+        stage('Run JMeter Load Test (via WSL2)') {
+            steps {
+                bat "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && rm -rf ${REPORT_DIR} ${RESULTS_FILE} ${ORDER_RESULTS} && ${JMETER_BIN} -n -t ${JMX_FILE} -JHOST=%TARGET_HOST% -JTHREADS=%THREADS% -JRAMPUP=%RAMPUP% -JLOOPS=%LOOPS% -l ${RESULTS_FILE} -e -o ${REPORT_DIR}\""
             }
         }
 
         stage('Evaluate Quality Gate') {
             steps {
                 script {
-                    def exitCode = sh(script: "python3 quality_gate.py ${RESULTS_FILE}", returnStatus: true)
-                    // Always show the human-readable report in the build log, pass or fail:
-                    sh "python3 quality_gate.py ${RESULTS_FILE} || true"
+                    def exitCode = bat(
+                        script: "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && python3 quality_gate.py ${RESULTS_FILE}\"",
+                        returnStatus: true
+                    )
+                    // Always echo the human-readable report to the build log, pass or fail:
+                    bat "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && python3 quality_gate.py ${RESULTS_FILE} || exit 0\""
                     if (exitCode != 0) {
                         currentBuild.result = 'FAILURE'
-                        error("Performance quality gate FAILED — NFR thresholds breached. Blocking this build/deployment.")
+                        error("Performance quality gate FAILED - response-time SLAs, <1% failed transactions, or zero-HTTP-500 rule breached. Blocking this build.")
                     } else {
-                        echo "Performance quality gate PASSED — all NFR thresholds met."
+                        echo "Performance quality gate PASSED - all NFR thresholds met, zero HTTP 500s."
                     }
                 }
             }
@@ -81,16 +118,19 @@ pipeline {
 
         stage('Archive Results') {
             steps {
-                archiveArtifacts artifacts: "${RESULTS_FILE}", allowEmptyArchive: false
-                archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: false
-                publishHTML(target: [
-                    reportName : 'JMeter Performance Dashboard',
-                    reportDir  : "${REPORT_DIR}",
-                    reportFiles: 'index.html',
-                    keepAll    : true,
-                    alwaysLinkToLastBuild: true,
-                    allowMissing: false
-                ])
+                dir('docs/performance-testing') {
+                    archiveArtifacts artifacts: "${RESULTS_FILE}", allowEmptyArchive: false
+                    archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: false
+                    archiveArtifacts artifacts: "${ORDER_RESULTS}", allowEmptyArchive: true
+                    publishHTML(target: [
+                        reportName : 'JMeter Performance Dashboard',
+                        reportDir  : "${REPORT_DIR}",
+                        reportFiles: 'index.html',
+                        keepAll    : true,
+                        alwaysLinkToLastBuild: true,
+                        allowMissing: false
+                    ])
+                }
             }
         }
     }
@@ -100,7 +140,7 @@ pipeline {
             echo 'Performance test passed the quality gate. Safe to proceed with deployment/promotion.'
         }
         failure {
-            echo 'Performance test failed the quality gate. Deployment/promotion should be blocked — review the dashboard and quality gate report above.'
+            echo 'Performance test failed the quality gate. Deployment/promotion should be blocked - review the dashboard and quality gate report above.'
         }
         always {
             echo "Build result: ${currentBuild.result}"

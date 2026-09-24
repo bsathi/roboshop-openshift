@@ -28,11 +28,15 @@ NFR_THRESHOLDS = {
     "TC07_Add_To_Cart":        {"avg_ms": 700,  "p95_ms": 1500, "max_error_pct": 1.0},
     "TC08_View_Cart":          {"avg_ms": 500,  "p95_ms": 1000, "max_error_pct": 1.0},
     "TC09_Shipping_Lookup":    {"avg_ms": 1000, "p95_ms": 2000, "max_error_pct": 1.0},
+    "TC09a_Shipping_Match":    {"avg_ms": 1000, "p95_ms": 2000, "max_error_pct": 1.0},
+    "TC09b_Shipping_Calc_Pittsburgh": {"avg_ms": 1000, "p95_ms": 2000, "max_error_pct": 1.0},
+    "TC09c_Shipping_Confirm":  {"avg_ms": 1000, "p95_ms": 2000, "max_error_pct": 1.0},
     "TC10_Checkout_Payment":   {"avg_ms": 1200, "p95_ms": 2500, "max_error_pct": 1.0},
 }
 
 OVERALL_MIN_THROUGHPUT_TPS = 8.0
 OVERALL_MAX_ERROR_PCT = 1.0
+FORBID_HTTP_500 = True   # hard gate: any single HTTP 500 anywhere fails the build, regardless of overall error rate
 
 
 def percentile(sorted_values, pct):
@@ -49,7 +53,7 @@ def percentile(sorted_values, pct):
 
 
 def load_jtl(path):
-    """Reads a JMeter CSV-format .jtl file into per-label lists of (elapsed_ms, success, timeStamp)."""
+    """Reads a JMeter CSV-format .jtl file into per-label lists of (elapsed_ms, success, timeStamp, responseCode)."""
     data = defaultdict(list)
     with open(path, newline="") as f:
         reader = csv.DictReader(f)
@@ -66,7 +70,8 @@ def load_jtl(path):
                 ts = int(row.get("timeStamp", 0))
             except ValueError:
                 ts = 0
-            data[label].append((elapsed, success, ts))
+            response_code = str(row.get("responseCode", "")).strip()
+            data[label].append((elapsed, success, ts, response_code))
     return data
 
 
@@ -74,6 +79,7 @@ def evaluate(data):
     results = []
     overall_total = 0
     overall_errors = 0
+    overall_500_count = 0
     all_timestamps = []
 
     for label, samples in data.items():
@@ -85,15 +91,17 @@ def evaluate(data):
         error_pct = (errors / total * 100.0) if total else 0.0
         avg_ms = sum(elapsed_values) / total if total else 0.0
         p95_ms = percentile(elapsed_values, 95)
+        count_500 = sum(1 for s in samples if s[3] == "500")
 
         overall_total += total
         overall_errors += errors
+        overall_500_count += count_500
         all_timestamps.extend(s[2] for s in samples)
 
         if thresholds is None:
             results.append({
                 "label": label, "total": total, "avg_ms": avg_ms, "p95_ms": p95_ms,
-                "error_pct": error_pct, "status": "SKIPPED (no NFR defined)",
+                "error_pct": error_pct, "count_500": count_500, "status": "SKIPPED (no NFR defined)",
             })
             continue
 
@@ -104,10 +112,12 @@ def evaluate(data):
             fail_reasons.append(f"p95 {p95_ms:.0f}ms > {thresholds['p95_ms']}ms")
         if error_pct > thresholds["max_error_pct"]:
             fail_reasons.append(f"errors {error_pct:.2f}% > {thresholds['max_error_pct']}%")
+        if FORBID_HTTP_500 and count_500 > 0:
+            fail_reasons.append(f"{count_500} HTTP 500 response(s) - zero tolerated")
 
         results.append({
             "label": label, "total": total, "avg_ms": avg_ms, "p95_ms": p95_ms,
-            "error_pct": error_pct,
+            "error_pct": error_pct, "count_500": count_500,
             "status": "PASS" if not fail_reasons else "FAIL (" + "; ".join(fail_reasons) + ")",
         })
 
@@ -123,12 +133,15 @@ def evaluate(data):
         overall_fail_reasons.append(f"throughput {overall_tps:.2f} tps < {OVERALL_MIN_THROUGHPUT_TPS} tps")
     if overall_error_pct > OVERALL_MAX_ERROR_PCT:
         overall_fail_reasons.append(f"error rate {overall_error_pct:.2f}% > {OVERALL_MAX_ERROR_PCT}%")
+    if FORBID_HTTP_500 and overall_500_count > 0:
+        overall_fail_reasons.append(f"{overall_500_count} HTTP 500 response(s) across all transactions - zero tolerated")
 
     overall = {
         "total_samples": overall_total,
         "duration_sec": duration_sec,
         "throughput_tps": overall_tps,
         "error_pct": overall_error_pct,
+        "count_500": overall_500_count,
         "status": "PASS" if not overall_fail_reasons else "FAIL (" + "; ".join(overall_fail_reasons) + ")",
     }
     return results, overall
@@ -138,18 +151,18 @@ def print_report(results, overall):
     print("\n" + "=" * 100)
     print(" PERFORMANCE QUALITY GATE REPORT")
     print("=" * 100)
-    header = f"{'Transaction':<28}{'Count':>7}{'Avg(ms)':>10}{'P95(ms)':>10}{'Err%':>8}   Status"
+    header = f"{'Transaction':<28}{'Count':>7}{'Avg(ms)':>10}{'P95(ms)':>10}{'Err%':>8}{'HTTP500':>9}   Status"
     print(header)
     print("-" * 100)
     any_fail = False
     for r in sorted(results, key=lambda x: x["label"]):
-        print(f"{r['label']:<28}{r['total']:>7}{r['avg_ms']:>10.0f}{r['p95_ms']:>10.0f}{r['error_pct']:>7.2f}%   {r['status']}")
+        print(f"{r['label']:<28}{r['total']:>7}{r['avg_ms']:>10.0f}{r['p95_ms']:>10.0f}{r['error_pct']:>7.2f}%{r.get('count_500', 0):>9}   {r['status']}")
         if r["status"].startswith("FAIL"):
             any_fail = True
 
     print("-" * 100)
-    print(f"{'OVERALL':<28}{overall['total_samples']:>7}{'':>10}{'':>10}{overall['error_pct']:>7.2f}%   {overall['status']}")
-    print(f"  Throughput: {overall['throughput_tps']:.2f} tps  |  Duration: {overall['duration_sec']:.1f}s")
+    print(f"{'OVERALL':<28}{overall['total_samples']:>7}{'':>10}{'':>10}{overall['error_pct']:>7.2f}%{overall.get('count_500', 0):>9}   {overall['status']}")
+    print(f"  Throughput: {overall['throughput_tps']:.2f} tps  |  Duration: {overall['duration_sec']:.1f}s  |  Total HTTP 500s: {overall.get('count_500', 0)}")
     print("=" * 100 + "\n")
 
     if overall["status"].startswith("FAIL"):
