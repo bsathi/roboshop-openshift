@@ -392,9 +392,8 @@
               <intProp name="Assertion.test_type">8</intProp>
             </ResponseAssertion>
             <hashTree/>
-            <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="Duration &lt; 1500ms">
-              <stringProp name="TestPlan.comments">Relaxed from 1000ms to 1500ms after a real 10-thread/5-loop run showed 49/50 calls comfortably under 1000ms with exactly one at 1058ms - normal Sandbox network/scheduling variance on shared infrastructure, not a functional defect (the request itself succeeded with a real 200 and correct cart data). 1500ms matches the threshold already used for TC07/TC09's comparable transactions.</stringProp>
-              <stringProp name="DurationAssertion.duration">1500</stringProp>
+            <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="Duration &lt; 1000ms">
+              <stringProp name="DurationAssertion.duration">1000</stringProp>
             </DurationAssertion>
             <hashTree/>
             <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Cart JSON (diagnostic only)" enabled="true">

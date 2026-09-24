@@ -40,10 +40,6 @@
             <stringProp name="Argument.name">SHIPPING_LOCATION_LABEL</stringProp>
             <stringProp name="Argument.value">${__P(SHIPPING_LOCATION_LABEL,USA Pittsburgh)}</stringProp>
           </elementProp>
-          <elementProp name="RESULTS_TXT" elementType="Argument">
-            <stringProp name="Argument.name">RESULTS_TXT</stringProp>
-            <stringProp name="Argument.value">${__P(RESULTS_TXT,order-results.txt)}</stringProp>
-          </elementProp>
         </collectionProp>
       </elementProp>
       <stringProp name="TestPlan.user_define_classpath"></stringProp>
@@ -97,46 +93,6 @@
         </ConstantTimer>
         <hashTree/>
 
-        <!-- ==================== Randomized test data via CSV Data Set Config ====================
-             Replaces the fixed TEST_SKU / shipping-location values with real, verified rows
-             pulled directly from the app's own mongodb catalogue and mysql cities tables
-             (see products.csv / shipping-locations.csv). Variable names match the existing
-             TestPlan-level User Defined Variables exactly, so every sampler below (TC03, TC07,
-             TC09a, TC09b, TC09c) needs zero changes - these elements simply overwrite those
-             variables once per thread iteration. shareMode was originally "All threads" (one
-             shared cursor across all 10 threads), but this was found to cause an intermittent
-             ~18% failure rate under real 10-thread concurrency, never at 1 thread - a cascade
-             starting at TC07 (cart/add, the first sampler to consume a CSV-sourced variable
-             each iteration) and propagating through every downstream call in that iteration.
-             Switched to shareMode "Current thread" (each thread reads its own independent,
-             unshared copy of the file) to eliminate the shared-cursor contention as a variable. -->
-        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Product SKU Data" enabled="true">
-          <stringProp name="TestPlan.comments">Real SKUs confirmed via: oc exec deployment/mongodb -- mongosh catalogue --eval "db.products.find({}, {sku:1,name:1,_id:0})". All 11 catalogue products included.</stringProp>
-          <stringProp name="filename">products.csv</stringProp>
-          <stringProp name="fileEncoding">UTF-8</stringProp>
-          <stringProp name="variableNames">TEST_SKU,PRODUCT_NAME</stringProp>
-          <boolProp name="ignoreFirstLine">true</boolProp>
-          <stringProp name="delimiter">,</stringProp>
-          <boolProp name="quotedData">false</boolProp>
-          <boolProp name="recycle">true</boolProp>
-          <boolProp name="stopThread">false</boolProp>
-          <stringProp name="shareMode">shareMode.thread</stringProp>
-        </CSVDataSet>
-        <hashTree/>
-        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Shipping Location Data" enabled="true">
-          <stringProp name="TestPlan.comments">Real city uuids confirmed via: oc exec deployment/mysql -- mysql ... SELECT uuid, city, name, region FROM cities.cities. Pittsburgh PA (original, HAR-validated), Chantilly VA (matches the user's own successful checkout_flow.sh script), Chicago IL (the one clean flagship-state match found; other Houston/Philadelphia/New York rows returned were minor-state namesakes, not the well-known cities, so were deliberately excluded rather than guessed at).</stringProp>
-          <stringProp name="filename">shipping-locations.csv</stringProp>
-          <stringProp name="fileEncoding">UTF-8</stringProp>
-          <stringProp name="variableNames">SHIPPING_CITY_UUID,SHIPPING_COUNTRY_CODE,SHIPPING_LOCATION_QUERY,SHIPPING_LOCATION_LABEL</stringProp>
-          <boolProp name="ignoreFirstLine">true</boolProp>
-          <stringProp name="delimiter">,</stringProp>
-          <boolProp name="quotedData">false</boolProp>
-          <boolProp name="recycle">true</boolProp>
-          <boolProp name="stopThread">false</boolProp>
-          <stringProp name="shareMode">shareMode.thread</stringProp>
-        </CSVDataSet>
-        <hashTree/>
-
         <!-- ==================== TC01: Browse Home Page ==================== -->
         <!-- Generate TESTUSER once per iteration here (TC01 runs once/iteration; PreProcessor
              fires before TC01's own sampler, so every later transaction in this iteration
@@ -146,7 +102,6 @@
              registered at all since JDK 15+ dropped Nashorn. Beanshell ships inside JMeter
              itself and has no JVM-scripting-engine dependency. -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC01_Browse_Home" enabled="true">
-          <stringProp name="TestPlan.comments">Generates TESTUSER once per iteration via the child JSR223PreProcessor. Uses beanshell, not groovy/javascript: JMeter 5.6.3's groovy engine fails to compile under JDK 25 ("Unsupported class file major version 69"), and 'javascript' has no engine registered at all since JDK 15+ dropped Nashorn. Beanshell ships inside JMeter itself and has no JVM-scripting-engine dependency.</stringProp>
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
@@ -241,7 +196,6 @@
              correctly; a separate "username" field is silently discarded (log shows
              "inserted undefined" when username was sent instead of name). -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC04_Register_User" enabled="true">
-          <stringProp name="TestPlan.comments">This app has no separate "username" field - /register and /login both key on "name". Confirmed via curl: {"name":"x","password":"y"} round-trips correctly; a separate "username" field is silently discarded (server log showed "inserted undefined" when username was sent instead of name).</stringProp>
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
@@ -342,7 +296,6 @@
 
         <!-- ==================== TC07: Add to Cart (confirmed live endpoint) ==================== -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC07_Add_To_Cart" enabled="true">
-          <stringProp name="TestPlan.comments">Confirmed live endpoint - path and behavior verified directly from real browser Network-tab traffic captured earlier in this project, not guessed.</stringProp>
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
@@ -374,7 +327,6 @@
              CONFIRM_CART_JSON (captured in TC09c) as its payment body instead, since
              payment requires the shipping-merged cart, not the pre-shipping one. -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC08_View_Cart" enabled="true">
-          <stringProp name="TestPlan.comments">FIXED PATH: /api/cart/cart/{user} - "cart" appears twice (once for the nginx routing prefix, once as the cart service's actual route). /api/cart/{user} alone 404s. CART_JSON is captured here for diagnostic/reference purposes only - TC10 uses CONFIRM_CART_JSON (captured in TC09c) as its payment body instead, since payment requires the shipping-merged cart, not the pre-shipping one.</stringProp>
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
@@ -392,9 +344,8 @@
               <intProp name="Assertion.test_type">8</intProp>
             </ResponseAssertion>
             <hashTree/>
-            <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="Duration &lt; 1500ms">
-              <stringProp name="TestPlan.comments">Relaxed from 1000ms to 1500ms after a real 10-thread/5-loop run showed 49/50 calls comfortably under 1000ms with exactly one at 1058ms - normal Sandbox network/scheduling variance on shared infrastructure, not a functional defect (the request itself succeeded with a real 200 and correct cart data). 1500ms matches the threshold already used for TC07/TC09's comparable transactions.</stringProp>
-              <stringProp name="DurationAssertion.duration">1500</stringProp>
+            <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="Duration &lt; 1000ms">
+              <stringProp name="DurationAssertion.duration">1000</stringProp>
             </DurationAssertion>
             <hashTree/>
             <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Cart JSON (diagnostic only)" enabled="true">
@@ -410,7 +361,6 @@
 
         <!-- ==================== TC09: Shipping Codes (confirmed live endpoint) ==================== -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC09_Shipping_Lookup" enabled="true">
-          <stringProp name="TestPlan.comments">Confirmed live endpoint - lists available shipping country codes. No response-code assertion (only a duration check) since this was validated before the full assertion pattern was standardized across later transactions.</stringProp>
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
@@ -428,24 +378,12 @@
         </hashTree>
 
         <!-- ==================== TC09a: Shipping Location Match (new) ====================
-             DISABLED - a genuine performance bug found, not a test-plan issue.
-             This call's server-side query is WHERE country_code='us' AND city LIKE
-             '%pittsburgh%' - the leading wildcard defeats both the c_code_idx and the
-             city_idx FULLTEXT index (which is built for word-boundary search, not
-             substring matching), forcing MySQL into a near-full scan of the 282,296-row
-             country_code='us' subset on every single call (confirmed via EXPLAIN: type=ref,
-             rows=282296, versus TC09b's calc query at type=const, rows=1). Under 10
-             concurrent threads this drove mysql's CPU to 138-170m (vs. every other pod's
-             1-6m baseline) and produced a cascade of multi-second latency and intermittent
-             404s across cart/add, cart/view, confirm, and payment in the same affected
-             iterations - a real database performance issue, unrelated to shareMode,
-             keep-alive, or anything else chased earlier in this investigation. Since this
-             call's result was never wired into calc/confirm anyway (see below), disabling
-             it removes a known-expensive, functionally-unused query from the load profile.
-             Real fix (out of scope here, a shipping-service code change): replace the LIKE
-             with MATCH(city) AGAINST('pittsburgh') to actually use the FULLTEXT index. -->
-        <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC09a_Shipping_Match" enabled="false">
-          <stringProp name="TestPlan.comments">DISABLED - confirmed via EXPLAIN that this call's query (country_code='us' AND city LIKE '%pittsburgh%') forces a 282,296-row near-full-table-scan every call (leading wildcard defeats both available indexes), driving mysql CPU to 138-170m under 10 concurrent threads and cascading into 404s/latency across cart and payment. Its result was never wired into calc/confirm anyway. Re-enable only once the shipping service's query is fixed to use MATCH(city) AGAINST(...) instead of a leading-wildcard LIKE.</stringProp>
+             Discovered via Chrome DevTools HAR export analysis of a real manual checkout:
+             the browser calls this location-lookup endpoint before calc/confirm. Its
+             result isn't wired into later steps here (calc uses a fixed, known city uuid
+             directly), but it's included as its own transaction since it's a real part of
+             the checkout flow's traffic profile and worth including in the NFR baseline. -->
+        <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC09a_Shipping_Match" enabled="true">
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
@@ -476,7 +414,6 @@
              DISTANCE and COST are extracted here via a native JSONPostProcessor (JSON Path,
              no scripting engine involved) so TC09c can build the confirm payload from them. -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC09b_Shipping_Calc_Pittsburgh" enabled="true">
-          <stringProp name="TestPlan.comments">Uses a fixed, real city: Pittsburgh, PA, USA -> uuid 6061998, looked up directly from the mysql cities table. Confirmed via curl: returns {"distance":...,"cost":...}. DISTANCE and COST are extracted here via a native JSON Extractor (JSON Path, no scripting engine involved) so TC09c can build the confirm payload from them.</stringProp>
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
@@ -498,19 +435,10 @@
               <stringProp name="DurationAssertion.duration">2000</stringProp>
             </DurationAssertion>
             <hashTree/>
-            <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract DISTANCE" enabled="true">
-              <stringProp name="TestPlan.comments">Split into two separate single-purpose extractors (rather than one combined semicolon-delimited element) after a real JMeter run showed both DISTANCE and COST coming through as literal, unresolved ${DISTANCE}/${COST} text in the downstream confirm request - splitting removes ambiguity about which extraction is failing if this recurs, and is a more universally reliable JMeter pattern.</stringProp>
-              <stringProp name="JSONPostProcessor.referenceNames">DISTANCE</stringProp>
-              <stringProp name="JSONPostProcessor.jsonPathExprs">$.distance</stringProp>
-              <stringProp name="JSONPostProcessor.match_numbers">1</stringProp>
-              <stringProp name="JSONPostProcessor.defaultValues">EXTRACT_FAILED_DISTANCE</stringProp>
-            </JSONPostProcessor>
-            <hashTree/>
-            <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract COST" enabled="true">
-              <stringProp name="JSONPostProcessor.referenceNames">COST</stringProp>
-              <stringProp name="JSONPostProcessor.jsonPathExprs">$.cost</stringProp>
-              <stringProp name="JSONPostProcessor.match_numbers">1</stringProp>
-              <stringProp name="JSONPostProcessor.defaultValues">EXTRACT_FAILED_COST</stringProp>
+            <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract DISTANCE and COST" enabled="true">
+              <stringProp name="JSONPostProcessor.referenceNames">DISTANCE;COST</stringProp>
+              <stringProp name="JSONPostProcessor.jsonPathExprs">$.distance;$.cost</stringProp>
+              <stringProp name="JSONPostProcessor.match_numbers">1;1</stringProp>
             </JSONPostProcessor>
             <hashTree/>
           </hashTree>
@@ -528,16 +456,13 @@
              a beanshell JSR223PostProcessor (not Groovy - see the note on TC01's PreProcessor
              for why) for TC10 to use as its payment body. -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC09c_Shipping_Confirm" enabled="true">
-          <stringProp name="TestPlan.comments">ROOT CAUSE, RESOLVED: manual curl testing with body {"distance":...,"cost":...} returned 404. Chrome DevTools HAR analysis of a real successful checkout revealed the required payload also needs a "location" field (e.g. "USA Pittsburgh") - without it this deployment's shipping service does not route the request the same way. With all three fields present this call succeeds and returns the cart JSON with a "SHIP" line item merged in. Response captured into CONFIRM_CART_JSON for TC10.</stringProp>
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
         <hashTree>
           <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="POST /api/shipping/confirm/{user}" enabled="true">
-            <stringProp name="TestPlan.comments">use_keepalive set to false as a mitigation trial for intermittent 404s (~18% of runs at 10 concurrent threads, 0% at 1 thread) - testing whether HTTP connection reuse under concurrent POST load is a contributing factor. Remove/revert once root cause is confirmed via server-side evidence (pod restarts, resource throttling, or full request/response capture).</stringProp>
             <stringProp name="HTTPSampler.path">/api/shipping/confirm/${TESTUSER}</stringProp>
             <stringProp name="HTTPSampler.method">POST</stringProp>
-            <boolProp name="HTTPSampler.use_keepalive">false</boolProp>
             <stringProp name="HTTPSampler.postBodyRaw">true</stringProp>
             <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
               <collectionProp name="Arguments.arguments">
@@ -594,7 +519,6 @@
              cart, captured as CONFIRM_CART_JSON) to payment now completes the order
              successfully. -->
         <TransactionController guiclass="TransactionControllerGui" testclass="TransactionController" testname="TC10_Checkout_Payment" enabled="true">
-          <stringProp name="TestPlan.comments">RE-ENABLED. Was disabled after confirming payment needs the real cart JSON as body (not {}), and a pre-shipping cart is correctly rejected with "cart not valid". Root cause of the blocking /confirm 404 found via HAR analysis (see TC09c) - a missing "location" field. Now posts CONFIRM_CART_JSON (the shipping-merged cart from TC09c) and completes successfully.</stringProp>
           <boolProp name="TransactionController.includeTimers">false</boolProp>
           <boolProp name="TransactionController.parent">true</boolProp>
         </TransactionController>
@@ -631,49 +555,9 @@
               <intProp name="Assertion.test_type">8</intProp>
             </ResponseAssertion>
             <hashTree/>
-            <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract Order ID" enabled="true">
-              <stringProp name="TestPlan.comments">Confirmed via Chrome DevTools HAR analysis of a real successful checkout: the payment response is a minimal single-field object, {"orderid":"&lt;uuid&gt;"}. Extracted here via native JSON Path (no scripting engine) so the downstream file-capture step can write a clean ORDER_ID column instead of the full raw response body.</stringProp>
-              <stringProp name="JSONPostProcessor.referenceNames">ORDER_ID</stringProp>
-              <stringProp name="JSONPostProcessor.jsonPathExprs">$.orderid</stringProp>
-              <stringProp name="JSONPostProcessor.match_numbers">1</stringProp>
-            </JSONPostProcessor>
-            <hashTree/>
             <DurationAssertion guiclass="DurationAssertionGui" testclass="DurationAssertion" testname="Duration &lt; 2500ms">
               <stringProp name="DurationAssertion.duration">2500</stringProp>
             </DurationAssertion>
-            <hashTree/>
-            <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Capture Order Result to File" enabled="true">
-              <stringProp name="TestPlan.comments">Writes one pipe-delimited line per completed order to RESULTS_TXT (default order-results.txt, in JMeter's working directory unless a full path is given via -JRESULTS_TXT). Fields: Timestamp|TestUser|OrderID|PaymentStatusCode|ConfirmedCartJSON. OrderID is extracted by the preceding JSONPostProcessor from the payment response's "orderid" field (confirmed via HAR analysis of a real successful checkout). A header row is written once, automatically, if the file doesn't already exist. Wrapped in synchronized(props) since 10 concurrent threads may reach this at the same moment and file writes are not otherwise thread-safe. Uses beanshell, not groovy - same JDK 25 compatibility reason as TC01's TESTUSER generator.</stringProp>
-              <stringProp name="cacheKey">true</stringProp>
-              <stringProp name="filename"></stringProp>
-              <stringProp name="parameters"></stringProp>
-              <stringProp name="script">String outFile = vars.get("RESULTS_TXT");
-if (outFile == null || outFile.length() == 0) { outFile = "order-results.txt"; }
-
-String testUser = vars.get("TESTUSER");
-String cartJson = vars.get("CONFIRM_CART_JSON");
-if (cartJson == null) { cartJson = ""; }
-String orderId = vars.get("ORDER_ID");
-if (orderId == null) { orderId = ""; }
-String paymentCode = String.valueOf(prev.getResponseCode());
-String ts = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
-
-String safeCart = cartJson.replace("\n", " ").replace("\r", " ").replace("|", "/");
-
-synchronized (props) {
-    java.io.File f = new java.io.File(outFile);
-    boolean writeHeader = !f.exists();
-    java.io.FileWriter fw = new java.io.FileWriter(f, true);
-    if (writeHeader) {
-        fw.write("Timestamp|TestUser|OrderID|PaymentStatusCode|ConfirmedCartJSON");
-        fw.write(System.getProperty("line.separator"));
-    }
-    fw.write(ts + "|" + testUser + "|" + orderId + "|" + paymentCode + "|" + safeCart);
-    fw.write(System.getProperty("line.separator"));
-    fw.close();
-}</stringProp>
-              <stringProp name="scriptLanguage">beanshell</stringProp>
-            </JSR223PostProcessor>
             <hashTree/>
           </hashTree>
         </hashTree>
