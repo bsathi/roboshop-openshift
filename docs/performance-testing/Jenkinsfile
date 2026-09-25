@@ -99,6 +99,29 @@ pipeline {
             }
         }
 
+        stage('Archive Results') {
+            // Deliberately runs BEFORE the quality gate, not after. A failing gate calls
+            // error(), which immediately aborts the pipeline - if archiving ran afterward,
+            // a failed build would never get its HTML report published at all, which is
+            // exactly backwards: the report matters most on a failing build. Archiving
+            // here means the dashboard is always available, pass or fail.
+            steps {
+                dir('docs/performance-testing') {
+                    archiveArtifacts artifacts: "${RESULTS_FILE}", allowEmptyArchive: false
+                    archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: false
+                    archiveArtifacts artifacts: "${ORDER_RESULTS}", allowEmptyArchive: true
+                    publishHTML(target: [
+                        reportName : 'JMeter Performance Dashboard',
+                        reportDir  : "${REPORT_DIR}",
+                        reportFiles: 'index.html',
+                        keepAll    : true,
+                        alwaysLinkToLastBuild: true,
+                        allowMissing: false
+                    ])
+                }
+            }
+        }
+
         stage('Evaluate Quality Gate') {
             steps {
                 script {
@@ -114,24 +137,6 @@ pipeline {
                     } else {
                         echo "Performance quality gate PASSED - all NFR thresholds met, zero HTTP 500s."
                     }
-                }
-            }
-        }
-
-        stage('Archive Results') {
-            steps {
-                dir('docs/performance-testing') {
-                    archiveArtifacts artifacts: "${RESULTS_FILE}", allowEmptyArchive: false
-                    archiveArtifacts artifacts: "${REPORT_DIR}/**", allowEmptyArchive: false
-                    archiveArtifacts artifacts: "${ORDER_RESULTS}", allowEmptyArchive: true
-                    publishHTML(target: [
-                        reportName : 'JMeter Performance Dashboard',
-                        reportDir  : "${REPORT_DIR}",
-                        reportFiles: 'index.html',
-                        keepAll    : true,
-                        alwaysLinkToLastBuild: true,
-                        allowMissing: false
-                    ])
                 }
             }
         }
