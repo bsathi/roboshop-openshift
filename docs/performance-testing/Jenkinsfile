@@ -41,15 +41,17 @@
 // /opt/apache-jmeter-5.6.3/bin/jmeter --version"" succeeded with no PATH changes needed.
 
 pipeline {
-    agent any
-
     parameters {
+        choice(name: 'NODE_LABEL', choices: ['built-in', 'Custom-Node1'],
+               description: 'Which Jenkins node to run this pipeline on. "built-in" is the Windows 10 desktop Jenkins itself runs on (java -jar jenkins.war); "Custom-Node1" is the separate JNLP agent process on the same desktop (D:\\jenkins-agent) - both reach the same WSL2/JMeter environment, since they run on the same physical machine.')
         string(name: 'TARGET_HOST', defaultValue: 'frontend-bsathi2020-dev.apps.rm3.7wse.p1.openshiftapps.com',
                description: 'roboshop frontend Route hostname to load test')
         string(name: 'THREADS', defaultValue: '10', description: 'Concurrent virtual users')
         string(name: 'RAMPUP', defaultValue: '10', description: 'Ramp-up period in seconds')
         string(name: 'LOOPS', defaultValue: '5', description: 'Iterations per virtual user')
     }
+
+    agent { label params.NODE_LABEL }
 
     environment {
         JMX_FILE       = 'roboshop-performance-test.jmx'
