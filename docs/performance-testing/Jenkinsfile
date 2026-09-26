@@ -144,6 +144,13 @@ pipeline {
                         alwaysLinkToLastBuild: true,
                         allowMissing: false
                     ])
+                    // Performance Plugin: builds the "Performance Trend" graph across
+                    // builds (response time / error % over time), reading the same
+                    // results.jtl the dashboard above already uses. Left permissive
+                    // (no errorFailedThreshold/errorUnstableThreshold set) deliberately -
+                    // quality_gate.py remains the single source of truth for pass/fail;
+                    // this step is for trend visualization only, not a second gate.
+                    perfReport sourceDataFiles: "${RESULTS_FILE}"
                 }
             }
         }
