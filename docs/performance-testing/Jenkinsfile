@@ -44,6 +44,8 @@ pipeline {
     parameters {
         choice(name: 'NODE_LABEL', choices: ['built-in', 'Custom-Node1'],
                description: 'Which Jenkins node to run this pipeline on. "built-in" is the Windows 10 desktop Jenkins itself runs on (java -jar jenkins.war); "Custom-Node1" is the separate JNLP agent process on the same desktop (D:\\jenkins-agent) - both reach the same WSL2/JMeter environment, since they run on the same physical machine.')
+        choice(name: 'JMETER_RUNTIME', choices: ['wsl', 'windows'],
+               description: '"wsl" (default) runs JMeter inside WSL2 Ubuntu-26.04 (/opt/apache-jmeter-5.6.3), the environment validated throughout this whole project. "windows" runs the native Windows JMeter install directly (D:\\software\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter.bat) via a plain bat step - requires a native Windows JDK/JRE already installed and on PATH for whichever node runs this pipeline (verify manually first: java -version, then jmeter.bat --version, from a plain cmd.exe window). Either way, quality_gate.py always runs via WSL2 python3, since it only parses the resulting .jtl file and does not care which engine produced it.')
         string(name: 'TARGET_HOST', defaultValue: 'frontend-bsathi2020-dev.apps.rm3.7wse.p1.openshiftapps.com',
                description: 'roboshop frontend Route hostname to load test')
         string(name: 'THREADS', defaultValue: '10', description: 'Concurrent virtual users')
@@ -54,11 +56,12 @@ pipeline {
     agent { label params.NODE_LABEL }
 
     environment {
-        JMX_FILE       = 'roboshop-performance-test.jmx'
-        RESULTS_FILE   = 'results.jtl'
-        REPORT_DIR     = 'performance-report'
-        ORDER_RESULTS  = 'order-results.txt'
-        JMETER_BIN     = '/opt/apache-jmeter-5.6.3/bin/jmeter'
+        JMX_FILE            = 'roboshop-performance-test.jmx'
+        RESULTS_FILE        = 'results.jtl'
+        REPORT_DIR          = 'performance-report'
+        ORDER_RESULTS       = 'order-results.txt'
+        JMETER_BIN          = '/opt/apache-jmeter-5.6.3/bin/jmeter'
+        JMETER_BIN_WINDOWS  = 'D:\\software\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter.bat'
     }
 
     stages {
@@ -87,15 +90,38 @@ pipeline {
             }
         }
 
-        stage('Verify WSL/JMeter Environment') {
+        stage('Verify Test Runtime Environment') {
             steps {
-                bat "wsl -d Ubuntu-26.04 bash -c \"java -version && python3 --version && ${JMETER_BIN} --version\""
+                script {
+                    // python3 (for quality_gate.py) is needed via WSL2 no matter which
+                    // engine actually runs the load test.
+                    bat "wsl -d Ubuntu-26.04 bash -c \"python3 --version\""
+
+                    if (params.JMETER_RUNTIME == 'windows') {
+                        bat 'java -version'
+                        bat "\"${JMETER_BIN_WINDOWS}\" --version"
+                    } else {
+                        bat "wsl -d Ubuntu-26.04 bash -c \"java -version && ${JMETER_BIN} --version\""
+                    }
+                }
             }
         }
 
-        stage('Run JMeter Load Test (via WSL2)') {
+        stage('Run JMeter Load Test') {
             steps {
-                bat "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && rm -rf ${REPORT_DIR} ${RESULTS_FILE} ${ORDER_RESULTS} && ${JMETER_BIN} -n -t ${JMX_FILE} -JHOST=%TARGET_HOST% -JTHREADS=%THREADS% -JRAMPUP=%RAMPUP% -JLOOPS=%LOOPS% -l ${RESULTS_FILE} -e -o ${REPORT_DIR}\""
+                script {
+                    // Clean up any previous run's output first, always via WSL2 - a
+                    // plain file delete doesn't care which OS process wrote the files.
+                    bat "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && rm -rf ${REPORT_DIR} ${RESULTS_FILE} ${ORDER_RESULTS}\""
+
+                    if (params.JMETER_RUNTIME == 'windows') {
+                        dir('docs/performance-testing') {
+                            bat "\"${JMETER_BIN_WINDOWS}\" -n -t ${JMX_FILE} -JHOST=%TARGET_HOST% -JTHREADS=%THREADS% -JRAMPUP=%RAMPUP% -JLOOPS=%LOOPS% -l ${RESULTS_FILE} -e -o ${REPORT_DIR}"
+                        }
+                    } else {
+                        bat "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && ${JMETER_BIN} -n -t ${JMX_FILE} -JHOST=%TARGET_HOST% -JTHREADS=%THREADS% -JRAMPUP=%RAMPUP% -JLOOPS=%LOOPS% -l ${RESULTS_FILE} -e -o ${REPORT_DIR}\""
+                    }
+                }
             }
         }
 
