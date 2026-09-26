@@ -60,7 +60,7 @@ pipeline {
         RESULTS_FILE        = 'results.jtl'
         REPORT_DIR          = 'performance-report'
         ORDER_RESULTS       = 'order-results.txt'
-        JMETER_BIN          = '/opt/apache-jmeter-5.6.3/bin/jmeter'
+        JMETER_BIN_LINUX    = '/opt/apache-jmeter-5.6.3/bin/jmeter'
         JMETER_BIN_WINDOWS  = 'D:\\software\\jmeter\\apache-jmeter-5.6.3\\bin\\jmeter.bat'
     }
 
@@ -101,7 +101,7 @@ pipeline {
                         bat 'java -version'
                         bat "\"${JMETER_BIN_WINDOWS}\" --version"
                     } else {
-                        bat "wsl -d Ubuntu-26.04 bash -c \"java -version && ${JMETER_BIN} --version\""
+                        bat "wsl -d Ubuntu-26.04 bash -c \"java -version && ${JMETER_BIN_LINUX} --version\""
                     }
                 }
             }
@@ -119,7 +119,7 @@ pipeline {
                             bat "\"${JMETER_BIN_WINDOWS}\" -n -t ${JMX_FILE} -JHOST=%TARGET_HOST% -JTHREADS=%THREADS% -JRAMPUP=%RAMPUP% -JLOOPS=%LOOPS% -l ${RESULTS_FILE} -e -o ${REPORT_DIR}"
                         }
                     } else {
-                        bat "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && ${JMETER_BIN} -n -t ${JMX_FILE} -JHOST=%TARGET_HOST% -JTHREADS=%THREADS% -JRAMPUP=%RAMPUP% -JLOOPS=%LOOPS% -l ${RESULTS_FILE} -e -o ${REPORT_DIR}\""
+                        bat "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && ${JMETER_BIN_LINUX} -n -t ${JMX_FILE} -JHOST=%TARGET_HOST% -JTHREADS=%THREADS% -JRAMPUP=%RAMPUP% -JLOOPS=%LOOPS% -l ${RESULTS_FILE} -e -o ${REPORT_DIR}\""
                     }
                 }
             }
