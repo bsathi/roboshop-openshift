@@ -104,7 +104,7 @@ pipeline {
                         // Fail fast with a clear message if the Sandbox's short-lived
                         // SSO token has expired, rather than a confusing failure deep
                         // inside incluster-run.sh's own oc calls.
-                        bat "wsl -d Ubuntu-26.04 bash -c \"oc whoami\""
+                        bat "wsl -d Ubuntu-26.04 bash -c \"/home/bsathi/bin/oc whoami\""
                         bat "wsl -d Ubuntu-26.04 bash -c \"cd '${env.WSL_WORKSPACE}/docs/performance-testing' && test -f job-template.yaml && test -f pvc.yaml && test -f retriever-pod.yaml && test -f incluster-run.sh && echo 'incluster manifests present'\""
                     } else {
                         bat "wsl -d Ubuntu-26.04 bash -c \"java -version && ${JMETER_BIN_LINUX} --version\""

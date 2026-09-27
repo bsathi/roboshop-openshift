@@ -9,6 +9,15 @@
 # Java throughout this whole project). If "oc whoami" fails, the Sandbox's
 # short-lived SSO token has likely expired - re-run "oc login" manually first.
 #
+# oc's own install directory is added to PATH explicitly below - oc was set up
+# via a PATH addition in ~/.bashrc, which a non-interactive shell (exactly how
+# Jenkins invokes this script via "wsl -d Ubuntu-26.04 bash -c ...") never
+# sources, the same class of issue jmeter hit earlier in this project. Safe to
+# fix with a plain PATH export here (unlike that earlier saga), since this is
+# a real, standalone .sh file - no cross-shell (cmd.exe/wsl.exe/bash) escaping
+# is involved in reaching this line at all.
+export PATH="/home/bsathi/bin:${PATH}"
+#
 # On completion, retrieved artifacts are copied into the CURRENT directory as
 # results.jtl, performance-report/, and order-results.txt - run this script
 # from docs/performance-testing/ so those land exactly where quality_gate.py
