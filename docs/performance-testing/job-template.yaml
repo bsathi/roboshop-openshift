@@ -1,0 +1,55 @@
+# job-template.yaml — same as job.yaml (the manually-validated, working version),
+# but with ${TARGET_HOST}/${PROTOCOL}/${PORT}/${THREADS}/${RAMPUP}/${LOOPS} as
+# substitutable placeholders instead of hardcoded values. Rendered via `envsubst`
+# by incluster-run.sh, using whatever values Jenkins' own build parameters supply -
+# job.yaml itself is left untouched for manual quick-testing with fixed defaults.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: roboshop-perftest-
+  labels:
+    app: roboshop-perftest
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: roboshop-perftest
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: jmeter
+          image: docker.io/bsathi2020/roboshop-perftest-engine:5.6.3
+          imagePullPolicy: Always
+          env:
+            - name: GIT_REPO
+              value: "https://github.com/bsathi/roboshop-openshift.git"
+            - name: GIT_BRANCH
+              value: "main"
+            - name: TARGET_HOST
+              value: "${TARGET_HOST}"
+            - name: PROTOCOL
+              value: "${PROTOCOL}"
+            - name: PORT
+              value: "${PORT}"
+            - name: THREADS
+              value: "${THREADS}"
+            - name: RAMPUP
+              value: "${RAMPUP}"
+            - name: LOOPS
+              value: "${LOOPS}"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: results
+          persistentVolumeClaim:
+            claimName: roboshop-perftest-results
