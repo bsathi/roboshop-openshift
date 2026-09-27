@@ -1,0 +1,69 @@
+# job.yaml — runs the roboshop performance test as a one-shot, in-cluster Job.
+#
+# Uses generateName (not a fixed name) so every "oc create -f job.yaml" automatically
+# gets a unique name (e.g. roboshop-perftest-a1b2c) - Jobs are run-to-completion
+# resources and can't simply be re-triggered by name, so this lets repeated runs
+# coexist without any manual cleanup/renaming step.
+#
+# restartPolicy: Never + backoffLimit: 0 - a failing quality gate should surface as
+# ONE failed Job, not retry automatically (retrying a load test on failure would
+# just re-run it against a possibly-still-unhealthy target, muddying results).
+#
+# Mounts the roboshop-perftest-results PVC (see pvc.yaml) at /results. entrypoint.sh
+# copies the final artifacts there before exiting. This replaces an earlier
+# sleep-then-exit workaround that tried to keep the pod alive briefly for "oc cp" -
+# that approach was a race condition (oc cp requires exec'ing into a RUNNING
+# container, and once the pod reaches Succeeded/Failed the container has already
+# exited and can no longer be exec'd into, regardless of sleep duration). The PVC
+# makes artifact retrieval independent of the pod's lifecycle entirely - retrieve
+# whenever convenient via retriever-pod.yaml, no time pressure.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: roboshop-perftest-
+  labels:
+    app: roboshop-perftest
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: roboshop-perftest
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: jmeter
+          image: docker.io/bsathi2020/roboshop-perftest-engine:5.6.3
+          imagePullPolicy: Always
+          env:
+            - name: GIT_REPO
+              value: "https://github.com/bsathi/roboshop-openshift.git"
+            - name: GIT_BRANCH
+              value: "main"
+            - name: TARGET_HOST
+              value: "frontend-bsathi2020-dev.apps.rm3.7wse.p1.openshiftapps.com"
+            - name: PROTOCOL
+              value: "http"
+            - name: PORT
+              value: "80"
+            - name: THREADS
+              value: "10"
+            - name: RAMPUP
+              value: "10"
+            - name: LOOPS
+              value: "5"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: results
+              mountPath: /results
+      volumes:
+        - name: results
+          persistentVolumeClaim:
+            claimName: roboshop-perftest-results

@@ -1,0 +1,37 @@
+# retriever-pod.yaml — a minimal, always-running pod mounting the SAME PVC the
+# Job wrote results into. Since this pod's container runs indefinitely (sleep
+# infinity), "oc cp" can exec into it calmly, with no time limit - solving the
+# race condition that a sleep-then-exit Job pod could not.
+#
+# Usage:
+#   oc create -f retriever-pod.yaml
+#   oc wait --for=condition=Ready pod/roboshop-perftest-retriever --timeout=60s
+#   oc cp roboshop-perftest-retriever:/results ./incluster-results
+#   oc delete -f retriever-pod.yaml    # clean up when done; the PVC itself persists
+apiVersion: v1
+kind: Pod
+metadata:
+  name: roboshop-perftest-retriever
+  labels:
+    app: roboshop-perftest-retriever
+spec:
+  restartPolicy: Never
+  containers:
+    - name: retriever
+      image: docker.io/bsathi2020/roboshop-perftest-engine:5.6.3
+      imagePullPolicy: Always
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: results
+          mountPath: /results
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+        limits:
+          cpu: "100m"
+          memory: "128Mi"
+  volumes:
+    - name: results
+      persistentVolumeClaim:
+        claimName: roboshop-perftest-results

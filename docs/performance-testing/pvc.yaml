@@ -1,0 +1,21 @@
+# pvc.yaml — persists test artifacts (results.jtl, HTML report, order-results.txt)
+# independent of the Job pod's lifecycle. Solves a real limitation hit in practice:
+# "oc cp" only works by exec'ing into a RUNNING container - once a Job's pod reaches
+# Succeeded/Failed, its container has already exited and can no longer be exec'd
+# into, even though the pod object itself may still be visible for a while. A PVC
+# sidesteps this entirely: the Job pod writes here while running, then a separate,
+# always-running retriever pod (see retriever-pod.yaml) mounts the SAME PVC
+# afterward, letting you "oc cp" from that pod calmly, with no time pressure.
+#
+# 1Gi is generous headroom for a single run's artifacts (a raw .jtl plus JMeter's
+# HTML dashboard, including its bundled JS/CSS libraries, typically totals a few MB).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: roboshop-perftest-results
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
