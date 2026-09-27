@@ -9,14 +9,16 @@
 # Java throughout this whole project). If "oc whoami" fails, the Sandbox's
 # short-lived SSO token has likely expired - re-run "oc login" manually first.
 #
-# oc's own install directory is added to PATH explicitly below - oc was set up
-# via a PATH addition in ~/.bashrc, which a non-interactive shell (exactly how
-# Jenkins invokes this script via "wsl -d Ubuntu-26.04 bash -c ...") never
-# sources, the same class of issue jmeter hit earlier in this project. Safe to
-# fix with a plain PATH export here (unlike that earlier saga), since this is
-# a real, standalone .sh file - no cross-shell (cmd.exe/wsl.exe/bash) escaping
-# is involved in reaching this line at all.
-export PATH="/home/bsathi/bin:${PATH}"
+# oc's own install directory is NOT added to PATH via export - that was tried and
+# reverted, since it reintroduces the exact bug already found and fixed for jmeter
+# earlier in this project: this WSL2 install inherits a large Windows-side PATH
+# (via WSL interop) containing entries with spaces and parentheses ("Program Files
+# (x86)", "Intel(R) Management Engine Components"), and expanding $PATH outside of
+# quotes breaks bash's parsing on those characters. Instead, a bash function named
+# "oc" wraps the real binary's full path - every plain "oc ..." call elsewhere in
+# this script transparently resolves to this function, so nothing else needed to
+# change, with zero PATH-manipulation risk.
+oc() { /home/bsathi/bin/oc "$@"; }
 #
 # On completion, retrieved artifacts are copied into the CURRENT directory as
 # results.jtl, performance-report/, and order-results.txt - run this script
@@ -81,6 +83,21 @@ if [ -n "$POD_NAME" ]; then
     oc logs "$POD_NAME" || true
 else
     echo "WARNING: could not find a pod for Job $JOB_NAME (it may not have scheduled in time)"
+fi
+
+# Always captured, regardless of outcome - oc logs only works once a container has
+# actually started, so it is USELESS for diagnosing a pod stuck in Pending/
+# ContainerCreating (e.g. an image pull failure, a resource quota rejection, or the
+# PVC Multi-Attach lock incident found earlier in this project). The Events section
+# of "oc describe pod" is where that class of failure actually gets reported, and
+# it is the one piece of evidence that would otherwise be silently lost the moment
+# this script deletes the pod/Job below.
+echo "=== Job pod events (diagnostic - captured before cleanup) ==="
+if [ -n "$POD_NAME" ]; then
+    oc describe pod "$POD_NAME" 2>/dev/null | sed -n '/^Events:/,$p' || echo "(no pod events available)"
+else
+    echo "No pod was ever created for this Job - describing the Job itself instead:"
+    oc describe job "$JOB_NAME" 2>/dev/null | sed -n '/^Events:/,$p' || echo "(no Job events available either)"
 fi
 
 if [ "$SUCCEEDED" != "1" ] && [ "$FAILED" != "1" ]; then
