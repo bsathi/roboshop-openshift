@@ -1,0 +1,9 @@
+# Force LF line endings for shell scripts regardless of platform/git config on
+# checkout - Windows Git commonly defaults to core.autocrlf=true, silently
+# converting LF to CRLF on checkout. bash cannot parse CRLF-terminated lines
+# correctly (each line's trailing \r becomes part of the last token/command,
+# producing "$'\r': command not found" and similar corrupted-parsing errors) -
+# this was hit directly when Jenkins' native Windows git checked out
+# incluster-run.sh for the first time, despite the file working perfectly when
+# checked out via WSL2's own Linux git throughout all manual testing.
+*.sh text eol=lf
